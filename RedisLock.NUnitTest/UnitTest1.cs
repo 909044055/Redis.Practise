@@ -5,18 +5,22 @@ using System;
 using System.Threading;
 using Dapper;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace RedisLock.NUnitTest
 {
     public class Tests
     {
+        //mysql连接
         public MySqlConnection con;
-
+        public IDatabase redisDb;
         [SetUp]
         public void Setup()
         {
             con = new MySqlConnection("Server=192.168.5.222;Port=3306;database=jy_log_db;uid=root;pwd=000000;ConvertZeroDateTime=True;Charset=utf8;SslMode=None;AllowUserVariables=True");
-
+            //连接redis
+            ConnectionMultiplexer redis = ConnectionMultiplexer.Connect("192.168.5.40:6379,password=666666,connectTimeout=5000,connectRetry=10,syncTimeout=10000,defaultDatabase=3");
+            redisDb = redis.GetDatabase();
             con.Open();
             con.Execute(@"CREATE TABLE IF NOT EXISTS `aaa` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -35,53 +39,72 @@ INSERT INTO `aaa` VALUES ('1', '0');
         [Test]
         public async Task Test1Async()
         {
+            List<Task> list = new List<Task>();
+
+            #region 测试一条记录(使用redis锁)
             var money = con.QueryFirst<int>("select money from aaa limit 1");
             Assert.AreEqual(0, money);
             await Add1Money(true);
             money = con.QueryFirst<int>("select money from aaa limit 1");
             Assert.AreEqual(1, money);
+            #endregion
 
-
-            await Task.Run(async () =>
+            #region 测试50并发(使用redis锁)
+            for (int i = 0; i < 50; i++)
             {
-
-                for (int i = 0; i < 50; i++)
+                list.Add(Task.Run(async () =>
                 {
                     await Add1Money(true);
-                }
-
-            });
+                }));
+            }
+            Task.WaitAll(list.ToArray());
 
             money = con.QueryFirst<int>("select money from aaa limit 1");
             Assert.AreEqual(51, money);
+            list.Clear();
+            #endregion
 
-
-            await Task.Run(async () =>
+            #region 测试1000并发(使用redis锁)
+            for (int j = 0; j < 20; j++)
             {
-                for (int j = 0; j < 20; j++)
-                {
-                    for (int i = 0; i < 50; i++)
-                    {
-                        await Add1Money(true);
-                    }
 
+
+                for (int i = 0; i < 50; i++)
+                {
+                    list.Add(Task.Run(async () =>
+                  {
+                      await Add1Money(true);
+                  }));
                 }
-            });
+                Task.WaitAll(list.ToArray());
+                list.Clear();
+            }
+
             money = con.QueryFirst<int>("select money from aaa limit 1");
             Assert.AreEqual(1051, money);
 
+            #endregion
 
-            await Task.Run(async () =>
+
+            #region 测试100并发(不使用redis锁)
+            for (int i = 0; i < 100; i++)
             {
-
-                for (int i = 0; i < 100; i++)
-                {
-                    await Add1Money(false);
-                }
+                var task = new Task(async () =>
+            {
+                await Add1Money(false);
 
             });
+                task.Start();
+                list.Add(task);
+
+            }
+
+            Task.WaitAll(list.ToArray());
+
             money = con.QueryFirst<int>("select money from aaa limit 1");
             Assert.AreNotEqual(1151, money);
+            #endregion
+
 
             Assert.Pass();
         }
@@ -89,9 +112,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
 
         public async Task Add1Money(bool useLock)
         {
-            //连接redis
-            ConnectionMultiplexer redis = ConnectionMultiplexer.Connect("192.168.5.40:6379,password=666666,connectTimeout=5000,connectRetry=10,syncTimeout=10000,defaultDatabase=3");
-            var redisDb = redis.GetDatabase();
+
 
 
             var guid = Guid.NewGuid().ToString();
