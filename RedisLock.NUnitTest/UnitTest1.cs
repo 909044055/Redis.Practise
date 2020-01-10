@@ -36,18 +36,55 @@ INSERT INTO `aaa` VALUES ('1', '0');
 
         }
 
+        /// <summary>
+        /// 重置money为0
+        /// </summary>
+        /// <returns></returns>
+        private async Task ResetMoney() {
+            await con.ExecuteAsync("update aaa set money=0");
+        }
+
+        /// <summary>
+        /// 查询money
+        /// </summary>
+        /// <returns></returns>
+        private async Task<int> QueryMoney() {
+          return  await con.QueryFirstAsync<int>("select money from aaa limit 1");
+        }
+
+        /// <summary>
+        /// 测试一条记录(使用redis锁)
+        /// </summary>
+        /// <returns></returns>
         [Test]
         public async Task Test1Async()
         {
+            await ResetMoney();
             List<Task> list = new List<Task>();
+            var money = await QueryMoney();
 
             #region 测试一条记录(使用redis锁)
-            var money = con.QueryFirst<int>("select money from aaa limit 1");
+
             Assert.AreEqual(0, money);
             await Add1Money(true);
-            money = con.QueryFirst<int>("select money from aaa limit 1");
+            money = await QueryMoney();
             Assert.AreEqual(1, money);
             #endregion
+             
+
+            Assert.Pass();
+        }
+
+        /// <summary>
+        /// 测试50并发(使用redis锁)
+        /// </summary>
+        /// <returns></returns>
+        [Test]
+        public async Task Test2Async()
+        {
+            await ResetMoney();
+            List<Task> list = new List<Task>();
+            var money = await QueryMoney();
 
             #region 测试50并发(使用redis锁)
             for (int i = 0; i < 50; i++)
@@ -59,10 +96,26 @@ INSERT INTO `aaa` VALUES ('1', '0');
             }
             Task.WaitAll(list.ToArray());
 
-            money = con.QueryFirst<int>("select money from aaa limit 1");
-            Assert.AreEqual(51, money);
+            money = await QueryMoney();
+            Assert.AreEqual(50, money);
             list.Clear();
             #endregion
+             
+
+
+            Assert.Pass();
+        }
+
+        /// <summary>
+        /// 测试1000并发(使用redis锁)
+        /// </summary>
+        /// <returns></returns>
+        [Test]
+        public async Task Test3Async()
+        {
+            await ResetMoney();
+            List<Task> list = new List<Task>();
+            var money = await QueryMoney();
 
             #region 测试1000并发(使用redis锁)
             for (int j = 0; j < 20; j++)
@@ -72,28 +125,45 @@ INSERT INTO `aaa` VALUES ('1', '0');
                 for (int i = 0; i < 50; i++)
                 {
                     list.Add(Task.Run(async () =>
-                  {
-                      await Add1Money(true);
-                  }));
+                    {
+                        await Add1Money(true);
+                    }));
                 }
                 Task.WaitAll(list.ToArray());
                 list.Clear();
             }
 
-            money = con.QueryFirst<int>("select money from aaa limit 1");
-            Assert.AreEqual(1051, money);
+            money = await QueryMoney();
+            Assert.AreEqual(1000, money);
 
             #endregion
+
+             
+
+            Assert.Pass();
+        }
+
+
+        /// <summary>
+        /// 测试100并发(不使用redis锁)
+        /// </summary>
+        /// <returns></returns>
+        [Test]
+        public async Task Test4Async()
+        {
+            await ResetMoney();
+            List<Task> list = new List<Task>();
+            var money = await QueryMoney();
 
 
             #region 测试100并发(不使用redis锁)
             for (int i = 0; i < 100; i++)
             {
                 var task = new Task(async () =>
-            {
-                await Add1Money(false);
+                {
+                    await Add1Money(false);
 
-            });
+                });
                 task.Start();
                 list.Add(task);
 
@@ -101,14 +171,15 @@ INSERT INTO `aaa` VALUES ('1', '0');
 
             Task.WaitAll(list.ToArray());
 
-            money = con.QueryFirst<int>("select money from aaa limit 1");
-            Assert.AreNotEqual(1151, money);
+            money = await QueryMoney();
+            Assert.AreNotEqual(1000, money);
             #endregion
 
 
             Assert.Pass();
         }
 
+         
 
         public async Task Add1Money(bool useLock)
         {
