@@ -1,15 +1,14 @@
+using Dapper;
 using MySql.Data.MySqlClient;
 using NUnit.Framework;
 using StackExchange.Redis;
 using System;
-using System.Threading;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace RedisLock.NUnitTest
 {
-    public class Tests
+    public class RedisLockUnitTest
     {
         //mysql¡¨Ω”
         public MySqlConnection con;
@@ -57,7 +56,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
         /// </summary>
         /// <returns></returns>
         [Test]
-        public async Task Test1Async()
+        public async Task TestAdd1YuanUseLockAsync()
         {
             await ResetMoney();
             List<Task> list = new List<Task>();
@@ -80,7 +79,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
         /// </summary>
         /// <returns></returns>
         [Test]
-        public async Task Test2Async()
+        public async Task TestAdd50YuanUseLockAsync()
         {
             await ResetMoney();
             List<Task> list = new List<Task>();
@@ -111,7 +110,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
         /// </summary>
         /// <returns></returns>
         [Test]
-        public async Task Test3Async()
+        public async Task TestAdd1000YuanUseLockAsync()
         {
             await ResetMoney();
             List<Task> list = new List<Task>();
@@ -149,7 +148,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
         /// </summary>
         /// <returns></returns>
         [Test]
-        public async Task Test4Async()
+        public async Task TestAdd100YuanNotUseLockAsync()
         {
             await ResetMoney();
             List<Task> list = new List<Task>();
@@ -172,7 +171,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
             Task.WaitAll(list.ToArray());
 
             money = await QueryMoney();
-            Assert.AreNotEqual(1000, money);
+            Assert.AreNotEqual(100, money);
             #endregion
 
 
@@ -195,7 +194,7 @@ INSERT INTO `aaa` VALUES ('1', '0');
                 int retry = 10000;
                 while (!await redisDb.LockTakeAsync("add_money_user001", guid, TimeSpan.FromSeconds(20)) && retry > 0)
                 {
-                    Thread.Sleep(10);
+                    await Task.Delay(10);
                     retry--;
                 }
             }
