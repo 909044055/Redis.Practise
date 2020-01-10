@@ -1,5 +1,5 @@
-# RedisLock.Practise
-  practise redis lock 
+# Redis.Practise
+  practise redis basic usage
 
 ----
 
